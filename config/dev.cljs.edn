@@ -1,4 +1,5 @@
-^{:css-dirs ["resources/public/css"]}
+^{:css-dirs ["resources/public/css"]
+  :ring-handler sample.handler/spa-handler}
 {:main sample.core
  :closure-defines {"re_frame.trace.trace_enabled_QMARK_" true
                    goog.DEBUG true}
