@@ -44,10 +44,10 @@
 
 (def history
   (pushy/pushy
-    (fn [match]
-      (rf/dispatch [:set-pushy-route (pushy->bidi match)])
-      (rf/dispatch [:rehydrate-from-url]))
-    (partial match-route app-routes)))
+   (fn [match]
+     (rf/dispatch [:set-pushy-route (pushy->bidi match)])
+     (rf/dispatch [:rehydrate-from-url]))
+   (partial match-route app-routes)))
 
 (def start-router! #(pushy/start! history))
 
@@ -67,7 +67,7 @@
   (letfn [(update-url-bar*
             [loc m]
             (pushy/set-token!
-              history (make-new-token loc m)))]
+             history (make-new-token loc m)))]
     (Throttle. update-url-bar* throttle-interval)))
 
 (defn filter-things [search things]
@@ -86,29 +86,29 @@
             "some test data"]})
 
 (rf/reg-cofx
-  :window-location
-  (fn [cofx _]
-    (assoc cofx :window-location
-           (-> js/window .-location .-href))))
+ :window-location
+ (fn [cofx _]
+   (assoc cofx :window-location
+          (-> js/window .-location .-href))))
 
 (rf/reg-fx
-  :encode-search-into-url
-  (fn [[current-location search]]
-    (.fire update-url-bar current-location search)))
+ :encode-search-into-url
+ (fn [[current-location search]]
+   (.fire update-url-bar current-location search)))
 
 ;;; the pushstate effect will kick off whatever other events need
 ;;; kicking off via pushy's matching and dispatching
 (rf/reg-fx
-  :push-state
-  (fn [route]
-    (let [path (apply bidi/path-for app-routes route)]
-      (pushy/set-token! history path))))
+ :push-state
+ (fn [route]
+   (let [path (apply bidi/path-for app-routes route)]
+     (pushy/set-token! history path))))
 
 (rf/reg-event-db
-  :initialize-db
-  [rf/debug]
-  (fn [_ _]
-    default-db))
+ :initialize-db
+ [rf/debug]
+ (fn [_ _]
+   default-db))
 
 (defn extract-search
   [url]
@@ -118,64 +118,64 @@
        keywordize-keys))
 
 (rf/reg-event-fx
-  :rehydrate-from-url
-  [rf/debug (rf/inject-cofx :window-location)]
-  (fn [{:keys [window-location db]} _]
-    (let [search (extract-search window-location)]
-      {:db (assoc db :search search)})))
+ :rehydrate-from-url
+ [rf/debug (rf/inject-cofx :window-location)]
+ (fn [{:keys [window-location db]} _]
+   (let [search (extract-search window-location)]
+     {:db (assoc db :search search)})))
 
 ;;; pushstate only otherwise we're gonna infinite loop
 (rf/reg-event-db
-  :set-pushy-route
-  [rf/debug]
-  (fn [db [_ route]]
-    (assoc db :route route)))
+ :set-pushy-route
+ [rf/debug]
+ (fn [db [_ route]]
+   (assoc db :route route)))
 
 ;;; let pushstate dispatch take over if we change via an event
 (rf/reg-event-fx
-  :set-route-programatically
-  [rf/debug]
-  (fn [_ [_ route]]
-    {:dispatch [:set-pushy-route route]
-     :push-state route}))
+ :set-route-programatically
+ [rf/debug]
+ (fn [_ [_ route]]
+   {:dispatch [:set-pushy-route route]
+    :push-state route}))
 
 (rf/reg-event-fx
-  :set-search-q
-  [rf/debug (rf/inject-cofx :window-location)]
-  (fn [{:keys [window-location db]} [_ search-text]]
-    (let [encoded-search (assoc (:search db) :q search-text)]
-    {:db (assoc db :search encoded-search)
-     :encode-search-into-url [window-location encoded-search]})))
+ :set-search-q
+ [rf/debug (rf/inject-cofx :window-location)]
+ (fn [{:keys [window-location db]} [_ search-text]]
+   (let [encoded-search (assoc (:search db) :q search-text)]
+     {:db (assoc db :search encoded-search)
+      :encode-search-into-url [window-location encoded-search]})))
 
 (rf/reg-event-fx
-  :clear-search
-  [rf/debug (rf/inject-cofx :window-location)]
-  (fn [{:keys [window-location db]} _]
-    {:db (dissoc db :search)
-     :encode-search-into-url [window-location nil]}))
+ :clear-search
+ [rf/debug (rf/inject-cofx :window-location)]
+ (fn [{:keys [window-location db]} _]
+   {:db (dissoc db :search)
+    :encode-search-into-url [window-location nil]}))
 
 (rf/reg-sub
-  :router/current-route
-  (fn [db _]
-    (:route db)))
+ :router/current-route
+ (fn [db _]
+   (:route db)))
 
 (rf/reg-sub
-  :search
-  (fn [db _]
-    (:search db)))
+ :search
+ (fn [db _]
+   (:search db)))
 
 (rf/reg-sub
-  :things
-  (fn [db _]
-    (:things db)))
+ :things
+ (fn [db _]
+   (:things db)))
 
 (rf/reg-sub
-  :filtered-things
-  (fn [_ _]
-    [(rf/subscribe [:things])
-     (rf/subscribe [:search])])
-  (fn [[things search] _]
-    (filter-things search things)))
+ :filtered-things
+ (fn [_ _]
+   [(rf/subscribe [:things])
+    (rf/subscribe [:search])])
+ (fn [[things search] _]
+   (filter-things search things)))
 
 ;;; reagent components
 
@@ -198,7 +198,7 @@
         :placeholder "search..."
         :value (or (:q @search) "")
         :on-change #(rf/dispatch
-                      [:set-search-q (-> % .-target .-value)])}]]
+                     [:set-search-q (-> % .-target .-value)])}]]
      [:> sui/Button {:basic true :on-click #(rf/dispatch [:clear-search])} "clear search"]
      [:> sui/List {:ordered true}
       (for [s @things] ^{:key s} [:> sui/List.Item s])]]))
@@ -225,13 +225,12 @@
       [:li [Link "/catalogue/?q=are%20good" "saved catalogue search"]]
       [:li [Link "/catalogue/5.8.1/" "a detail"]]
       [:li [Link "/catalogue/4.8.7/?hl=A" "an detail with highlight"]]]
-     (match (spy :info @route)
-            [:home] [Home]
-            [:details/list] [DetailList]
-            [:details/view-one :id detail-ref] [OneDetail detail-ref]
-            [:error/not-found] [NotFound]
-            :else [:div "huh? no route match"]
-            )
+     (match @route
+       [:home] [Home]
+       [:details/list] [DetailList]
+       [:details/view-one :id detail-ref] [OneDetail detail-ref]
+       [:error/not-found] [NotFound]
+       :else [:div "huh? no route match"])
      [:> sui/Divider]
      [:> sui/Button.Group {:basic true :vertical true}
       [:> sui/Button {:on-click #(rf/dispatch [:initialize-db])} "reset db"]
@@ -267,9 +266,9 @@
     (start-router!)
     (reset! initializing? false))
   (rg/render
-    [:> sui/Container
-     (stylefy/use-style {:margin-top "2em"} {})
-     [layout-ui]]
-    (.getElementById js/document "app")))
+   [:> sui/Container
+    (stylefy/use-style {:margin-top "2em"} {})
+    [layout-ui]]
+   (.getElementById js/document "app")))
 
 (mount-root)
