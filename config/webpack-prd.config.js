@@ -2,11 +2,8 @@ var path = require('path');
 
 module.exports = {
   entry: {
-    'leaflet': './src/js/leaflet.js',
     'react': './src/js/react.js',
-    'semantic_ui': './src/js/semantic_ui.js',
-    'three': './src/js/three.js',
-    'vega': './src/js/vega.js'
+    'semantic_ui': './src/js/semantic_ui.js'
   },
   mode: 'production',
   output: {
