@@ -18,7 +18,7 @@
   (:import [goog Uri]
            [goog.async Throttle]))
 
-(def throttle-interval 150)
+(def throttle-interval 150) ;; milliseconds
 
 (def app-routes
   ["/"
@@ -106,7 +106,7 @@
 
 (rf/reg-event-db
  :initialize-db
- [rf/debug]
+ #_[rf/debug]
  (fn [_ _]
    default-db))
 
@@ -119,7 +119,7 @@
 
 (rf/reg-event-fx
  :rehydrate-from-url
- [rf/debug (rf/inject-cofx :window-location)]
+ [#_rf/debug (rf/inject-cofx :window-location)]
  (fn [{:keys [window-location db]} _]
    (let [search (extract-search window-location)]
      {:db (assoc db :search search)})))
@@ -127,21 +127,21 @@
 ;;; pushstate only otherwise we're gonna infinite loop
 (rf/reg-event-db
  :set-pushy-route
- [rf/debug]
+ [#_rf/debug]
  (fn [db [_ route]]
    (assoc db :route route)))
 
 ;;; let pushstate dispatch take over if we change via an event
 (rf/reg-event-fx
  :set-route-programatically
- [rf/debug]
+ [#_rf/debug]
  (fn [_ [_ route]]
    {:dispatch [:set-pushy-route route]
     :push-state route}))
 
 (rf/reg-event-fx
  :set-search-q
- [rf/debug (rf/inject-cofx :window-location)]
+ [#_rf/debug (rf/inject-cofx :window-location)]
  (fn [{:keys [window-location db]} [_ search-text]]
    (let [encoded-search (assoc (:search db) :q search-text)]
      {:db (assoc db :search encoded-search)
@@ -149,7 +149,7 @@
 
 (rf/reg-event-fx
  :clear-search
- [rf/debug (rf/inject-cofx :window-location)]
+ [#_rf/debug (rf/inject-cofx :window-location)]
  (fn [{:keys [window-location db]} _]
    {:db (dissoc db :search)
     :encode-search-into-url [window-location nil]}))
