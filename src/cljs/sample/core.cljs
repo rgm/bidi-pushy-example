@@ -46,10 +46,7 @@
   (pushy/pushy
     (fn [match]
       (rf/dispatch [:set-pushy-route (pushy->bidi match)])
-      ;; TODO do this only for search routes !!
-      (if-let [q (get-in match [:query-params :q])]
-        (rf/dispatch [:set-search-q q])
-        (rf/dispatch [:clear-search])))
+      (rf/dispatch [:rehydrate-from-url]))
     (partial match-route app-routes)))
 
 (def start-router! #(pushy/start! history))
