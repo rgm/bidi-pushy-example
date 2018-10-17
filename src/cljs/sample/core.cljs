@@ -224,7 +224,7 @@
       [:li [Link "/catalogue/" "full catalogue"]]
       [:li [Link "/catalogue/?q=are%20good" "saved catalogue search"]]
       [:li [Link "/catalogue/5.8.1/" "a detail"]]
-      [:li [Link "/catalogue/4.8.7/?hl=A" "an detail with highlight"]]]
+      [:li [Link "/catalogue/4.8.7/?hl=A" "a detail with highlight spec'd in query params"]]]
      (match @route
        [:home] [Home]
        [:details/list] [DetailList]
