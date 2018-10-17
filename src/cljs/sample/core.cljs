@@ -7,6 +7,7 @@
    - we come in via a link directly"
   (:require [bidi.bidi :as bidi]
             [cemerick.url]
+            [cljs.core.match :refer [match]]
             [pushy.core :as pushy]
             [re-frame.core :as rf]
             [reagent.core :as rg]
@@ -17,34 +18,39 @@
   (:import [goog Uri]
            [goog.async Throttle]))
 
-;; - route via a-href
-;; - route via dispatch in form
-;; - route restoration on reload
-;; - set form value on route change
-;; - set URL value on form change
-;; - debounce pushy set-token!
-
-(enable-console-print!)
-
 (def throttle-interval 150)
 
 (def app-routes
-  ["/" [["" :home]
-        ["catalogue/" {"" :details/list
-                       [:id "/"] :details/view-one}]
-        [true :error/not-found]]])
+  ["/"
+   [["" :home]
+    ["catalogue/"
+     {"" :details/list
+      [:id "/"] :details/view-one}]
+    [true :error/not-found]]])
+
+(defn pushy->bidi
+  "converts pushy's output to something suitable for use in bidi/path-for"
+  [m]
+  (let [{:keys [handler route-params]} m]
+    (reduce (fn [acc [k v]]
+              (conj acc k v)) [handler] route-params)))
 
 (defn match-route
   "wrap bidi match-route* to make use of query params"
   [routes path & {:as options}]
   (let [route (bidi/match-route* routes path options)
         query (some-> path Uri. .getQuery cemerick.url/query->map keywordize-keys)]
-    (spy :info (assoc route :query-params query))))
+    (assoc route :query-params query)))
 
 (def history
-  (pushy/pushy (fn [match]
-                 (rf/dispatch [:set-route match]))
-               (partial match-route app-routes)))
+  (pushy/pushy
+    (fn [match]
+      (rf/dispatch [:set-pushy-route (pushy->bidi match)])
+      ;; TODO do this only for search routes !!
+      (if-let [q (get-in match [:query-params :q])]
+        (rf/dispatch [:set-search-q q])
+        (rf/dispatch [:clear-search])))
+    (partial match-route app-routes)))
 
 (def start-router! #(pushy/start! history))
 
@@ -57,9 +63,8 @@
 (defn make-new-token
   [loc m]
   (let [loc (bidi/path-for app-routes :details/list)]
-    (str loc
-         "?"
-         (cemerick.url/map->query (update-values cemerick.url/url-encode m)))))
+    (str loc (some->> (cemerick.url/map->query m)
+                      (str "?")))))
 
 (def update-url-bar
   (letfn [(update-url-bar*
@@ -78,8 +83,10 @@
 
 (def default-db
   {:route [:home]
-   :things ["hi" "whatup"
-            "things are good" "some test data"]})
+   :things ["hi"
+            "whatup"
+            "things are good"
+            "some test data"]})
 
 (rf/reg-cofx
   :window-location
@@ -92,17 +99,19 @@
   (fn [[current-location search]]
     (.fire update-url-bar current-location search)))
 
+;;; the pushstate effect will kick off whatever other events need
+;;; kicking off via pushy's matching and dispatching
 (rf/reg-fx
   :push-state
   (fn [route]
-    (prn route)
-    (let [path (spy :warn (bidi/path-for app-routes route))]
-      #_(pushy/set-token! history path))))
+    (let [path (apply bidi/path-for app-routes route)]
+      (pushy/set-token! history path))))
 
 (rf/reg-event-db
- :initialize-db
- (fn [_ _]
-   default-db))
+  :initialize-db
+  [rf/debug]
+  (fn [_ _]
+    default-db))
 
 (defn extract-search
   [url]
@@ -113,25 +122,29 @@
 
 (rf/reg-event-fx
   :rehydrate-from-url
-  [(rf/inject-cofx :window-location)]
+  [rf/debug (rf/inject-cofx :window-location)]
   (fn [{:keys [window-location db]} _]
     (let [search (extract-search window-location)]
       {:db (assoc db :search search)})))
 
+;;; pushstate only otherwise we're gonna infinite loop
 (rf/reg-event-db
-  :set-route
+  :set-pushy-route
+  [rf/debug]
   (fn [db [_ route]]
     (assoc db :route route)))
 
 ;;; let pushstate dispatch take over if we change via an event
 (rf/reg-event-fx
   :set-route-programatically
+  [rf/debug]
   (fn [_ [_ route]]
-    {:push-state route}))
+    {:dispatch [:set-pushy-route route]
+     :push-state route}))
 
 (rf/reg-event-fx
   :set-search-q
-  [(rf/inject-cofx :window-location)]
+  [rf/debug (rf/inject-cofx :window-location)]
   (fn [{:keys [window-location db]} [_ search-text]]
     (let [encoded-search (assoc (:search db) :q search-text)]
     {:db (assoc db :search encoded-search)
@@ -139,13 +152,15 @@
 
 (rf/reg-event-fx
   :clear-search
-  (fn [{:keys [db]} _]
-    {:db (dissoc db :search)}))
+  [rf/debug (rf/inject-cofx :window-location)]
+  (fn [{:keys [window-location db]} _]
+    {:db (dissoc db :search)
+     :encode-search-into-url [window-location nil]}))
 
 (rf/reg-sub
   :router/current-route
   (fn [db _]
-    (get-in db [:route :handler])))
+    (:route db)))
 
 (rf/reg-sub
   :search
@@ -169,7 +184,9 @@
 
 (defn Home
   []
-  [:> sui/Header "Home route"])
+  [:<>
+   [:> sui/Header "Home route"]
+   [:p "(Home page stuff)"]])
 
 (defn DetailList
   []
@@ -180,16 +197,18 @@
      [:> sui/Form
       [:> sui/Form.Input
        {:label "search"
+        :type "search"
+        :placeholder "search..."
         :value (or (:q @search) "")
         :on-change #(rf/dispatch
                       [:set-search-q (-> % .-target .-value)])}]]
-     [:> sui/Button {:on-click #(rf/dispatch [:clear-search])} "clear search"]
+     [:> sui/Button {:basic true :on-click #(rf/dispatch [:clear-search])} "clear search"]
      [:> sui/List {:ordered true}
       (for [s @things] ^{:key s} [:> sui/List.Item s])]]))
 
-(defn Detail
-  []
-  [:> sui/Header "Detail"])
+(defn OneDetail
+  [id]
+  [:> sui/Header "Detail " id])
 
 (defn NotFound
   []
@@ -197,7 +216,7 @@
 
 (defn Link
   [url name]
-  [:a {:href url} name])
+  [:a {:href url} [:strong name] " " url])
 
 (defn layout-ui
   []
@@ -205,22 +224,37 @@
     [:div
      [:ul
       [:li [Link "/" "home"]]
-      [:li [Link "/catalogue/" "catalogue"]]
-      [:li [Link "/catalogue/?q=a%20test" "searching catalogue"]]
+      [:li [Link "/catalogue/" "full catalogue"]]
+      [:li [Link "/catalogue/?q=are%20good" "saved catalogue search"]]
       [:li [Link "/catalogue/5.8.1/" "a detail"]]
       [:li [Link "/catalogue/4.8.7/?hl=A" "an detail with highlight"]]]
-     (case @route
-       :home [Home]
-       :details/list [DetailList]
-       :details/view-one [Detail]
-       :error/not-found [NotFound]
-       [:div "huh?"])
-     [:> sui/Button {:on-click #(rf/dispatch [:initialize-db])} "reset db"]
-     [:> sui/Button {:on-click #(rf/dispatch [:rehydrate-from-url])} "rehydrate from url"]
-     [:> sui/Button {:on-click #(rf/dispatch [:set-route-programatically
-                                              {:handler :details/view-one
-                                               :route-params {:id "4.8.9"}}])}
-      "change route programmatically"]]))
+     (match (spy :info @route)
+            [:home] [Home]
+            [:details/list] [DetailList]
+            [:details/view-one :id detail-ref] [OneDetail detail-ref]
+            [:error/not-found] [NotFound]
+            :else [:div "huh? no route match"]
+            )
+     [:> sui/Divider]
+     [:> sui/Button.Group {:basic true :vertical true}
+      [:> sui/Button {:on-click #(rf/dispatch [:initialize-db])} "reset db"]
+      [:> sui/Button {:on-click #(rf/dispatch [:rehydrate-from-url])} "rehydrate from url"]]
+     [:> sui/Divider {:hidden true}]
+     [:> sui/Button.Group {:basic true :vertical true}
+      [:> sui/Button {:on-click
+                      #(do
+                         (rf/dispatch [:set-route-programatically [:details/list]])
+                         (rf/dispatch [:clear-search]))}
+       "show detail list"]
+      [:> sui/Button {:on-click
+                      #(do (rf/dispatch [:set-route-programatically
+                                         [:details/list]])
+                           (rf/dispatch [:set-search-q "wha"]))}
+       "show detail list with search"]
+      [:> sui/Button {:on-click
+                      #(rf/dispatch [:set-route-programatically
+                                     [:details/view-one :id "4.8.9"]])}
+       "show detail 4.8.9"]]]))
 
 ;;; kickoff
 
